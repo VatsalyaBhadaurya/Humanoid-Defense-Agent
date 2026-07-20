@@ -1,39 +1,51 @@
 """
-Compact threat → mitigation policy table.
-Keys: (threat_type, confidence_level)
-Values: action identifier consumed by responder.py
+TARA threat → mitigation policy table.
+Maps (threat_type, confidence_level) → ordered list of action tokens.
+All action tokens are consumed by responder.dispatch().
 """
 
-POLICY: dict[tuple[str, str], str] = {
-    # SSH brute force
-    ("ssh_brute_force", "low"):      "log_only",
-    ("ssh_brute_force", "medium"):   "block_soft",
-    ("ssh_brute_force", "high"):     "block_hard + tighten_ssh",
-    ("ssh_brute_force", "critical"): "block_crit + tighten_ssh + notify",
+from typing import NamedTuple
 
-    # DDoS / traffic flood
-    ("ddos", "low"):      "log_only",
-    ("ddos", "medium"):   "router_rate_limit",
-    ("ddos", "high"):     "router_rate_limit + notify",
-    ("ddos", "critical"): "router_block_crit + notify",
 
-    # Malware / suspicious process
-    ("malware", "low"):      "log_only",
-    ("malware", "medium"):   "alert_operator",
-    ("malware", "high"):     "isolate_process + notify",
-    ("malware", "critical"): "isolate_process + block_crit + notify",
+class Policy(NamedTuple):
+    actions: list[str]
+    description: str
 
-    # Port scan / recon
-    ("port_scan", "low"):      "log_only",
-    ("port_scan", "medium"):   "block_soft + increase_monitoring",
-    ("port_scan", "high"):     "block_hard + notify",
-    ("port_scan", "critical"): "block_crit + notify",
+
+# Confidence levels in ascending severity order
+CONFIDENCE_LEVELS = ("low", "medium", "high", "critical")
+
+_TABLE: dict[tuple[str, str], Policy] = {
+    # ── SSH brute-force ───────────────────────────────────────────────────────
+    ("ssh_brute_force", "low"):      Policy(["log_only"],                                     "Log and monitor"),
+    ("ssh_brute_force", "medium"):   Policy(["block_soft", "tighten_ssh"],                    "Soft block + tighten SSH"),
+    ("ssh_brute_force", "high"):     Policy(["block_hard", "tighten_ssh", "notify"],          "Hard block + tighten SSH + notify operator"),
+    ("ssh_brute_force", "critical"): Policy(["block_crit", "tighten_ssh", "notify"],          "Critical block + tighten SSH + notify operator"),
+
+    # ── DDoS / traffic flood ──────────────────────────────────────────────────
+    ("ddos", "low"):      Policy(["log_only"],                                                 "Log and monitor"),
+    ("ddos", "medium"):   Policy(["router_rate_limit"],                                        "Router rate-limit"),
+    ("ddos", "high"):     Policy(["router_rate_limit", "notify"],                              "Router rate-limit + notify operator"),
+    ("ddos", "critical"): Policy(["router_block_crit", "notify"],                             "Router drop + notify operator"),
+
+    # ── Malware / suspicious process ──────────────────────────────────────────
+    ("malware", "low"):      Policy(["log_only"],                                              "Log and monitor"),
+    ("malware", "medium"):   Policy(["notify"],                                                "Alert operator for review"),
+    ("malware", "high"):     Policy(["isolate_process", "notify"],                            "Isolate process + notify operator"),
+    ("malware", "critical"): Policy(["isolate_process", "block_crit", "notify"],             "Isolate process + block source + notify operator"),
+
+    # ── Port scan / recon ─────────────────────────────────────────────────────
+    ("port_scan", "low"):      Policy(["log_only"],                                            "Log and monitor"),
+    ("port_scan", "medium"):   Policy(["block_soft", "increase_monitoring"],                  "Soft block + increase monitoring"),
+    ("port_scan", "high"):     Policy(["block_hard", "notify"],                               "Hard block + notify operator"),
+    ("port_scan", "critical"): Policy(["block_crit", "notify"],                              "Critical block + notify operator"),
+
+    # ── Multi-detector correlation (escalated events) ─────────────────────────
+    ("correlated_ssh_scan", "critical"):    Policy(["block_crit", "tighten_ssh", "notify"], "Correlated SSH+scan — critical block"),
+    ("correlated_ddos_scan", "critical"):   Policy(["router_block_crit", "block_crit", "notify"], "Correlated DDoS+scan — full block"),
+    ("correlated_malware_net", "critical"): Policy(["isolate_process", "block_crit", "notify"], "Correlated malware+network — isolate + block"),
 }
 
 
-def lookup(threat: str, confidence: str) -> str:
-    return POLICY.get((threat, confidence), "log_only")
-
-
-def parse_actions(action_str: str) -> list[str]:
-    return [a.strip() for a in action_str.split("+")]
+def lookup(threat: str, confidence: str) -> Policy:
+    return _TABLE.get((threat, confidence), Policy(["log_only"], "No matching policy — log only"))

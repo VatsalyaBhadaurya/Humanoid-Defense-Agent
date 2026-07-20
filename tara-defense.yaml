@@ -1,0 +1,71 @@
+network:
+  interface: eth0
+
+router:
+  host: 192.168.1.1
+  user: admin
+  ssh_key: /home/tara/.ssh/router_key
+  timeout_secs: 10
+  retry_attempts: 2
+
+thresholds:
+  ssh:
+    window_secs: 60
+    medium: 5
+    high: 10
+    critical: 20
+  traffic:
+    flood_medium_bps: 50000000
+    flood_high_bps: 100000000
+    flood_critical_bps: 200000000
+  scan:
+    window_secs: 30
+    medium_ports: 10
+    high_ports: 25
+    critical_ports: 50
+
+blocks:
+  soft_secs: 300
+  hard_secs: 1800
+  critical_secs: 3600
+
+paths:
+  auth_log: /var/log/auth.log
+  audit_log: /var/log/tara-defense/incidents.jsonl
+  state_file: /var/lib/tara-defense/state.json
+  pid_file: /run/tara-defense.pid
+  health_file: /run/tara-defense.health
+
+system:
+  poll_interval_secs: 5
+  memory_pressure_mb: 200
+  dry_run: false
+  operator_notify_cooldown_secs: 300
+
+# IPs that must never be blocked
+whitelist:
+  - 127.0.0.1
+  - ::1
+
+suspicious_processes:
+  names:
+    - nc
+    - ncat
+    - netcat
+    - nmap
+    - masscan
+    - hydra
+    - medusa
+    - john
+    - hashcat
+    - msfconsole
+    - xmrig
+    - minerd
+    - cryptominer
+  outbound_ports:
+    - 4444
+    - 1337
+    - 31337
+    - 6666
+    - 9999
+  max_outbound_connections: 50
