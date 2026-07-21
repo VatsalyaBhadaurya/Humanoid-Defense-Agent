@@ -47,6 +47,15 @@ whitelist:
   - 127.0.0.1
   - ::1
 
+# AI-enhanced threat analysis (optional — requires ANTHROPIC_API_KEY env var)
+# Only fires for high/critical confidence events or correlated multi-detector threats.
+# Runs in a background thread — never delays enforcement decisions.
+ai:
+  enabled: false             # set to true and export ANTHROPIC_API_KEY to activate
+  model: claude-opus-4-8    # Claude model to use for analysis
+  cooldown_secs: 300         # minimum seconds between API calls per (source_ip, threat) pair
+  max_tokens: 1024           # max tokens in Claude's response
+
 suspicious_processes:
   names:
     - nc

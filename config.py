@@ -117,6 +117,12 @@ SUSPICIOUS_PROC_NAMES:      set[str] = set()
 SUSPICIOUS_OUTBOUND_PORTS:  set[int] = set()
 MAX_OUTBOUND_CONNS_PER_PROC: int     = 50
 
+# ── AI (Claude) analysis ──────────────────────────────────────────────────────
+AI_ENABLED:      bool  = False
+AI_MODEL:        str   = "claude-opus-4-8"
+AI_COOLDOWN_SECS: int  = 300   # minimum seconds between AI calls per (ip, threat) pair
+AI_MAX_TOKENS:   int   = 1024
+
 
 def _load_values() -> None:
     """Populate module-level constants from the loaded _cfg dict + env overrides."""
@@ -131,6 +137,7 @@ def _load_values() -> None:
         POLL_INTERVAL, MEMORY_PRESSURE_MB, DRY_RUN, OPERATOR_NOTIFY_COOLDOWN,
         WHITELIST_STATIC, SUSPICIOUS_PROC_NAMES, SUSPICIOUS_OUTBOUND_PORTS,
         MAX_OUTBOUND_CONNS_PER_PROC,
+        AI_ENABLED, AI_MODEL, AI_COOLDOWN_SECS, AI_MAX_TOKENS,
     )
 
     g = _get
@@ -180,6 +187,11 @@ def _load_values() -> None:
     ]))
     SUSPICIOUS_OUTBOUND_PORTS = set(int(p) for p in proc_cfg.get("outbound_ports", [4444,1337,31337,6666,9999]))
     MAX_OUTBOUND_CONNS_PER_PROC = int(proc_cfg.get("max_outbound_connections", 50))
+
+    AI_ENABLED       = bool(g(["ai", "enabled"],       False))
+    AI_MODEL         =  str(g(["ai", "model"],         "claude-opus-4-8"))
+    AI_COOLDOWN_SECS = int(g(["ai", "cooldown_secs"],  300))
+    AI_MAX_TOKENS    = int(g(["ai", "max_tokens"],     1024))
 
 
 # Auto-load when module is imported

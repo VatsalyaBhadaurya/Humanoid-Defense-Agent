@@ -24,6 +24,7 @@ import config
 import health
 import responder
 import state
+import tara_ai
 import tara_policy
 from correlator import Correlator
 from detectors.base import DetectorEvent
@@ -137,6 +138,9 @@ def _handle(event: DetectorEvent, correlator: Correlator) -> None:
         applied_action    = ", ".join(applied) if applied else "none",
         notes             = event.notes,
     )
+
+    # AI advisory analysis — runs in background thread, never blocks the poll loop
+    tara_ai.analyze_async(event)
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────

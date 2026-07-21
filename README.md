@@ -42,6 +42,13 @@ An edge cyber-security daemon that protects humanoid robot by monitoring the Jet
                 │  │   Responder      │  │
                 │  │ iptables + router│  │
                 │  │ SSH enforcement  │  │
+                │  └────────┬─────────┘  │
+                │           │ (async,    │
+                │  ┌────────▼─────────┐  │
+                │  │  AI Advisory     │  │  ──── Anthropic API
+                │  │  (tara_ai.py)    │  │       (Claude Opus)
+                │  │  high/critical   │  │
+                │  │  events only     │  │
                 │  └──────────────────┘  │
                 └────────────────────────┘
 ```
@@ -83,6 +90,7 @@ tara-defense/
 ├── coordinator.py        # Main daemon — poll loop, signal handling, PID file
 ├── config.py             # YAML + env var config loader with validation
 ├── tara_policy.py        # Threat → mitigation policy table
+├── tara_ai.py            # AI advisory layer — Claude threat analysis (async)
 ├── state.py              # Persistent block/whitelist/metrics (atomic JSON)
 ├── audit.py              # Structured JSON-lines audit logger
 ├── correlator.py         # Multi-detector correlation engine
@@ -90,7 +98,7 @@ tara-defense/
 ├── health.py             # systemd watchdog notify + heartbeat file
 ├── admin.py              # Admin CLI (tara-admin)
 ├── tara-defense.yaml     # Example config file
-├── requirements.txt      # psutil, PyYAML
+├── requirements.txt      # psutil, PyYAML, anthropic
 ├── install.sh            # Full installer for Jetson (Ubuntu)
 ├── detectors/
 │   ├── base.py           # Shared DetectorEvent dataclass
@@ -123,6 +131,7 @@ tara-defense/
 pip3 install -r requirements.txt
 # psutil>=5.9.0
 # PyYAML>=6.0
+# anthropic>=0.40.0   (required only if ai.enabled: true)
 ```
 
 ---
@@ -237,6 +246,30 @@ All fields can also be overridden with environment variables:
 | `ROUTER_USER` | `router.user` |
 | `ROUTER_SSH_KEY` | `router.ssh_key` |
 | `TARA_DRY_RUN=true` | `system.dry_run` |
+| `ANTHROPIC_API_KEY` | Claude API key (required when `ai.enabled: true`) |
+
+### AI Analysis (optional)
+
+When enabled, TARA submits high and critical incidents to Claude for a second-opinion analysis. The rule-based system enforces immediately as usual — Claude's response arrives asynchronously and is written back to the audit log.
+
+```yaml
+ai:
+  enabled: true          # activate AI analysis
+  model: claude-opus-4-8
+  cooldown_secs: 300     # max 1 API call per (source_ip, threat) per 5 minutes
+  max_tokens: 1024
+```
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+sudo systemctl restart tara-defense
+```
+
+AI analysis fires for:
+- Any event with `high` or `critical` confidence
+- Correlated multi-detector events (`correlated_ssh_scan`, `correlated_ddos_scan`, `correlated_malware_net`)
+
+If the API is unreachable or the key is missing, a single WARN log entry is written and the system continues normally.
 
 ---
 
@@ -401,11 +434,31 @@ Every detection, decision, and action is written to `/var/log/tara-defense/incid
 }
 ```
 
+When AI analysis is enabled, a second record is appended for each qualifying incident:
+
+```json
+{
+  "level": "INFO",
+  "ts": "2026-07-20T10:31:08.451123+00:00",
+  "tag": "tara_ai",
+  "detail": "{\"source_ip\": \"10.0.0.20\", \"threat\": \"ssh_brute_force\", \"original_confidence\": \"high\", \"ai_confirmed\": true, \"ai_refined_confidence\": \"high\", \"ai_false_positive\": \"low\", \"ai_reasoning\": \"15 failed SSH attempts in 60 seconds from a single IP is a textbook brute-force pattern.\", \"ai_actions\": [\"maintain block\", \"notify operator\"], \"ai_operator_summary\": \"Confirmed brute-force attack from 10.0.0.20 — block is appropriate, no action needed.\"}"
+}
+```
+
 Parse with:
 
 ```bash
 # All incidents
 grep '"level": "INCIDENT"' /var/log/tara-defense/incidents.jsonl | python3 -m json.tool
+
+# AI analysis records only
+grep '"tag": "tara_ai"' /var/log/tara-defense/incidents.jsonl | python3 -c "
+import sys, json
+for line in sys.stdin:
+    rec = json.loads(line)
+    ai = json.loads(rec['detail'])
+    print(f\"{rec['ts']} [{ai['threat']}] confirmed={ai['ai_confirmed']} fp={ai['ai_false_positive']} — {ai['ai_operator_summary']}\"
+)"
 
 # By threat type
 grep '"threat": "ssh_brute_force"' /var/log/tara-defense/incidents.jsonl
