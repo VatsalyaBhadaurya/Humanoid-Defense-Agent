@@ -131,7 +131,7 @@ tara-defense/
 pip3 install -r requirements.txt
 # psutil>=5.9.0
 # PyYAML>=6.0
-# anthropic>=0.40.0   (required only if ai.enabled: true)
+# No extra packages for AI — uses stdlib urllib to talk to local Ollama
 ```
 
 ---
@@ -246,30 +246,41 @@ All fields can also be overridden with environment variables:
 | `ROUTER_USER` | `router.user` |
 | `ROUTER_SSH_KEY` | `router.ssh_key` |
 | `TARA_DRY_RUN=true` | `system.dry_run` |
-| `ANTHROPIC_API_KEY` | Claude API key (required when `ai.enabled: true`) |
+### AI Analysis (optional, local — no internet or API key needed)
 
-### AI Analysis (optional)
+TARA uses a locally-running [Ollama](https://ollama.com) model to analyze high and critical incidents. The rule-based system enforces immediately as usual — the LLM's response arrives asynchronously and is written back to the audit log. No data ever leaves the device.
 
-When enabled, TARA submits high and critical incidents to Claude for a second-opinion analysis. The rule-based system enforces immediately as usual — Claude's response arrives asynchronously and is written back to the audit log.
+**Setup (on the Jetson):**
+
+```bash
+# Install Ollama (detects Jetson GPU automatically)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull a model — pick based on your Jetson variant:
+ollama pull llama3.2:3b     # Jetson Orin (≥8 GB RAM) — recommended
+ollama pull llama3.2:1b     # Jetson Nano / Xavier (4 GB RAM) — lighter
+ollama pull phi3:mini        # Alternative: good reasoning, ~2 GB
+
+# Ollama starts as a systemd service automatically
+systemctl status ollama
+```
+
+**Enable in config:**
 
 ```yaml
 ai:
-  enabled: true          # activate AI analysis
-  model: claude-opus-4-8
-  cooldown_secs: 300     # max 1 API call per (source_ip, threat) per 5 minutes
-  max_tokens: 1024
-```
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-sudo systemctl restart tara-defense
+  enabled: true
+  model: llama3.2:3b
+  ollama_host: http://localhost:11434
+  cooldown_secs: 300     # max 1 call per (source_ip, threat) per 5 minutes
+  timeout_secs: 60       # first call may be slow while model loads
 ```
 
 AI analysis fires for:
 - Any event with `high` or `critical` confidence
 - Correlated multi-detector events (`correlated_ssh_scan`, `correlated_ddos_scan`, `correlated_malware_net`)
 
-If the API is unreachable or the key is missing, a single WARN log entry is written and the system continues normally.
+If Ollama is not running, a single WARN is written and the system continues normally.
 
 ---
 

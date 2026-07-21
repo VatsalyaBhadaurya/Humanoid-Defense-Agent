@@ -117,11 +117,12 @@ SUSPICIOUS_PROC_NAMES:      set[str] = set()
 SUSPICIOUS_OUTBOUND_PORTS:  set[int] = set()
 MAX_OUTBOUND_CONNS_PER_PROC: int     = 50
 
-# ── AI (Claude) analysis ──────────────────────────────────────────────────────
-AI_ENABLED:      bool  = False
-AI_MODEL:        str   = "claude-opus-4-8"
-AI_COOLDOWN_SECS: int  = 300   # minimum seconds between AI calls per (ip, threat) pair
-AI_MAX_TOKENS:   int   = 1024
+# ── AI (local Ollama) analysis ────────────────────────────────────────────────
+AI_ENABLED:       bool = False
+AI_MODEL:         str  = "llama3.2:3b"
+AI_OLLAMA_HOST:   str  = "http://localhost:11434"
+AI_COOLDOWN_SECS: int  = 300   # minimum seconds between calls per (ip, threat) pair
+AI_TIMEOUT_SECS:  int  = 60    # per-request timeout — local inference can be slow
 
 
 def _load_values() -> None:
@@ -137,7 +138,7 @@ def _load_values() -> None:
         POLL_INTERVAL, MEMORY_PRESSURE_MB, DRY_RUN, OPERATOR_NOTIFY_COOLDOWN,
         WHITELIST_STATIC, SUSPICIOUS_PROC_NAMES, SUSPICIOUS_OUTBOUND_PORTS,
         MAX_OUTBOUND_CONNS_PER_PROC,
-        AI_ENABLED, AI_MODEL, AI_COOLDOWN_SECS, AI_MAX_TOKENS,
+        AI_ENABLED, AI_MODEL, AI_OLLAMA_HOST, AI_COOLDOWN_SECS, AI_TIMEOUT_SECS,
     )
 
     g = _get
@@ -189,9 +190,10 @@ def _load_values() -> None:
     MAX_OUTBOUND_CONNS_PER_PROC = int(proc_cfg.get("max_outbound_connections", 50))
 
     AI_ENABLED       = bool(g(["ai", "enabled"],       False))
-    AI_MODEL         =  str(g(["ai", "model"],         "claude-opus-4-8"))
+    AI_MODEL         =  str(g(["ai", "model"],         "llama3.2:3b"))
+    AI_OLLAMA_HOST   =  str(g(["ai", "ollama_host"],   "http://localhost:11434"))
     AI_COOLDOWN_SECS = int(g(["ai", "cooldown_secs"],  300))
-    AI_MAX_TOKENS    = int(g(["ai", "max_tokens"],     1024))
+    AI_TIMEOUT_SECS  = int(g(["ai", "timeout_secs"],   60))
 
 
 # Auto-load when module is imported

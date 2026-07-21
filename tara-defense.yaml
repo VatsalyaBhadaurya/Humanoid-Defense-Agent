@@ -47,14 +47,21 @@ whitelist:
   - 127.0.0.1
   - ::1
 
-# AI-enhanced threat analysis (optional — requires ANTHROPIC_API_KEY env var)
+# AI-enhanced threat analysis using a local Ollama model (no internet or API key needed)
 # Only fires for high/critical confidence events or correlated multi-detector threats.
 # Runs in a background thread — never delays enforcement decisions.
+#
+# Setup:
+#   curl -fsSL https://ollama.com/install.sh | sh
+#   ollama pull llama3.2:3b        # ~2 GB, good on Jetson Orin
+#   ollama pull llama3.2:1b        # ~0.9 GB, faster on Jetson Nano
+#   ollama serve                   # starts on port 11434 (auto-starts after install)
 ai:
-  enabled: false             # set to true and export ANTHROPIC_API_KEY to activate
-  model: claude-opus-4-8    # Claude model to use for analysis
-  cooldown_secs: 300         # minimum seconds between API calls per (source_ip, threat) pair
-  max_tokens: 1024           # max tokens in Claude's response
+  enabled: false             # set to true once Ollama is running
+  model: llama3.2:3b         # any model you have pulled: llama3.2:1b, phi3:mini, mistral, etc.
+  ollama_host: http://localhost:11434
+  cooldown_secs: 300         # minimum seconds between calls per (source_ip, threat) pair
+  timeout_secs: 60           # per-request timeout — local inference can be slow on first call
 
 suspicious_processes:
   names:
